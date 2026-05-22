@@ -482,6 +482,43 @@ a {
   background: var(--toggle-bg);
 }
 
+.book-select {
+  display: inline-grid;
+  grid-template-columns: auto minmax(118px, 180px);
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--toggle-bg);
+  color: var(--control-ink);
+  font-size: 12px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.book-select span {
+  color: var(--muted);
+}
+
+.book-select select {
+  min-width: 0;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--neutral-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.book-select:focus-within {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px var(--focus-ring-soft);
+}
+
 .progress-filter {
   grid-template-columns: repeat(3, 1fr);
 }

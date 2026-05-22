@@ -10,7 +10,9 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "tsx prisma/create-db.ts",
     "seed": "tsx prisma/seed.ts",
-    "setup": "prisma generate && tsx prisma/create-db.ts && tsx prisma/seed.ts"
+    "import:corpus": "tsx prisma/import-corpus-book.ts",
+    "db:add-selected-book": "tsx prisma/add-selected-book-slug.ts",
+    "setup": "prisma generate && tsx prisma/create-db.ts && tsx prisma/seed.ts && tsx prisma/add-selected-book-slug.ts && tsx prisma/import-corpus-book.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",

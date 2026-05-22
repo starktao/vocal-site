@@ -1,17 +1,22 @@
 import { requireUser } from "@/lib/auth";
-import { getBookWords } from "@/lib/vocab";
+import { getAllBooks, getBookWords, resolveBookSlug } from "@/lib/vocab";
 import { prisma } from "@/lib/prisma";
 import { VocabApp } from "@/components/VocabApp";
 
-export default async function LearnPage() {
+export default async function LearnPage({ searchParams }: { searchParams?: Promise<{ book?: string }> }) {
   const user = await requireUser();
-  const { book, words } = await getBookWords();
-  const [preferences, progressRows, favoriteRows, lastPosition] = await Promise.all([
-    prisma.userPreference.upsert({
-      where: { userId: user.id },
-      update: {},
-      create: { userId: user.id }
-    }),
+  const params = await searchParams;
+  const preferences = await prisma.userPreference.upsert({
+    where: { userId: user.id },
+    update: {},
+    create: { userId: user.id }
+  });
+  const bookSlug = await resolveBookSlug(params?.book, preferences.selectedBookSlug);
+  const [{ book, words }, books] = await Promise.all([
+    getBookWords(bookSlug),
+    getAllBooks()
+  ]);
+  const [progressRows, favoriteRows, lastPosition] = await Promise.all([
     prisma.userWordProgress.findMany({
       where: { userId: user.id, word: { bookId: book.id } },
       select: { wordId: true, viewCount: true }
@@ -26,11 +31,18 @@ export default async function LearnPage() {
     })
   ]);
 
+  await prisma.userPreference.upsert({
+    where: { userId: user.id },
+    update: { selectedBookSlug: book.slug },
+    create: { userId: user.id, selectedBookSlug: book.slug }
+  });
+
   return (
     <VocabApp
       initialData={{
         user,
         book,
+        books,
         words: words.map((word) => ({
           id: word.id,
           orderIndex: word.orderIndex,
@@ -44,7 +56,8 @@ export default async function LearnPage() {
             accent: preferences.accent,
             soundMode: preferences.soundMode,
             progressFilter: preferences.progressFilter,
-            eyeCareLevel: preferences.eyeCareLevel
+            eyeCareLevel: preferences.eyeCareLevel,
+            selectedBookSlug: book.slug
           },
           progress: Object.fromEntries(progressRows.map((row) => [row.wordId, row.viewCount])),
           favorites: favoriteRows.map((row) => row.wordId),

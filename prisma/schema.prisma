@@ -67,6 +67,7 @@ model UserPreference {
   soundMode      String   @default("auto")
   progressFilter String   @default("all")
   eyeCareLevel   Int      @default(0)
+  selectedBookSlug String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }

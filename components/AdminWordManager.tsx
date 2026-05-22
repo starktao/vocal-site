@@ -1,16 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
-import type { VocabCard } from "@/lib/types";
+import type { VocabBookDto, VocabCard } from "@/lib/types";
 
 export function AdminWordManager({
+  book,
+  books,
   words,
   stats
 }: {
+  book: VocabBookDto;
+  books: VocabBookDto[];
   words: VocabCard[];
   stats: { users: number; progressRows: number; wordCount: number };
 }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(words[0]?.id || 0);
   const selected = words.find((word) => word.id === selectedId) || words[0];
@@ -68,10 +74,16 @@ export function AdminWordManager({
       <header className="admin-header">
         <div>
           <h1>管理员后台</h1>
-          <div className="page-summary">词库编辑和本地学习数据概览</div>
+          <div className="page-summary">{book.title} · 词库编辑和本地学习数据概览</div>
         </div>
         <div className="account-actions">
-          <Link className="secondary-btn" href="/learn">返回学习页</Link>
+          <label className="book-select" aria-label="Vocabulary book">
+            <span>词书</span>
+            <select value={book.slug} onChange={(event) => router.push(`/admin?book=${encodeURIComponent(event.target.value)}`)}>
+              {books.map((item) => <option key={item.slug} value={item.slug}>{item.title}</option>)}
+            </select>
+          </label>
+          <Link className="secondary-btn" href={`/learn?book=${encodeURIComponent(book.slug)}`}>返回学习页</Link>
         </div>
       </header>
       <section className="admin-grid">

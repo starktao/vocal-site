@@ -1,18 +1,25 @@
 import { requireAdmin } from "@/lib/auth";
-import { getBookWords } from "@/lib/vocab";
+import { getAllBooks, getBookWords, resolveBookSlug } from "@/lib/vocab";
 import { prisma } from "@/lib/prisma";
 import { AdminWordManager } from "@/components/AdminWordManager";
 
-export default async function AdminPage() {
+export default async function AdminPage({ searchParams }: { searchParams?: Promise<{ book?: string }> }) {
   await requireAdmin();
-  const { words } = await getBookWords();
+  const params = await searchParams;
+  const bookSlug = await resolveBookSlug(params?.book);
+  const [{ book, words }, books] = await Promise.all([
+    getBookWords(bookSlug),
+    getAllBooks()
+  ]);
   const [users, progressRows] = await Promise.all([
     prisma.user.count(),
-    prisma.userWordProgress.count()
+    prisma.userWordProgress.count({ where: { word: { bookId: book.id } } })
   ]);
 
   return (
     <AdminWordManager
+      book={book}
+      books={books}
       words={words.map((word) => ({
         id: word.id,
         orderIndex: word.orderIndex,

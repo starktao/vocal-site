@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, LogOut, Search, Star, X } from "lucide-react";
 import { KeyboardEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Explanation, UserStateDto, VocabCard } from "@/lib/types";
+import type { Explanation, UserStateDto, VocabBookDto, VocabCard } from "@/lib/types";
 
 type VocabResponse = {
   user: { id: number; username: string; role: "USER" | "ADMIN" };
-  book: { id: number; title: string };
+  book: VocabBookDto;
+  books: VocabBookDto[];
   words: VocabCard[];
   state: UserStateDto;
 };
@@ -165,16 +166,22 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
     void fetch("/api/last-position", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ page, wordId }),
+      body: JSON.stringify({ page, wordId, bookSlug: initialData.book.slug }),
       keepalive: true
     });
-  }, []);
+  }, [initialData.book.slug]);
 
   const savePreferences = useDebouncedCallback(() => {
     void fetch("/api/preferences", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accent, soundMode, progressFilter, eyeCareLevel })
+      body: JSON.stringify({
+        accent,
+        soundMode,
+        progressFilter,
+        eyeCareLevel,
+        selectedBookSlug: initialData.book.slug
+      })
     });
   });
 
@@ -265,11 +272,11 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
     void fetch("/api/progress", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wordId: entry.id, increment: true })
+      body: JSON.stringify({ wordId: entry.id, increment: true, bookSlug: initialData.book.slug })
     }).then((response) => response.ok ? response.json() : null).then((data) => {
       if (data?.wordId) setProgress((current) => ({ ...current, [data.wordId]: data.viewCount }));
     });
-  }, [selectEntry]);
+  }, [initialData.book.slug, selectEntry]);
 
   const toggleFavorite = useCallback((entry: VocabCard) => {
     const nextFavorite = !favorites.has(entry.id);
@@ -283,7 +290,7 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
     void fetch("/api/favorite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wordId: entry.id, favorite: nextFavorite })
+      body: JSON.stringify({ wordId: entry.id, favorite: nextFavorite, bookSlug: initialData.book.slug })
     }).then((response) => response.ok ? response.json() : Promise.reject()).then((data) => {
       setFavorites((current) => {
         const next = new Set(current);
@@ -300,7 +307,13 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
       });
       showToast("收藏保存失败");
     });
-  }, [favorites, showToast]);
+  }, [favorites, initialData.book.slug, showToast]);
+
+  function handleBookChange(value: string) {
+    if (!value || value === initialData.book.slug) return;
+    setDetailId(null);
+    router.push(`/learn?book=${encodeURIComponent(value)}`);
+  }
 
   const setPage = useCallback((page: number, force = false) => {
     const next = Math.max(1, Math.min(totalPages, page));
@@ -573,6 +586,14 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
         <div className="controls">
           <Segmented value={accent} options={[["en-US", "US"], ["en-GB", "UK"]]} onChange={setAccent} className="voice" />
           <Segmented value={soundMode} options={[["auto", "Auto"], ["manual", "Manual"]]} onChange={setSoundMode} className="sound-mode" />
+          <label className="book-select" aria-label="Vocabulary book">
+            <span>词书</span>
+            <select value={initialData.book.slug} onChange={(event) => handleBookChange(event.target.value)}>
+              {initialData.books.map((book) => (
+                <option key={book.slug} value={book.slug}>{book.title}</option>
+              ))}
+            </select>
+          </label>
           <label className="eye-slider" aria-label="Eye care level">
             <span className="eye-label">护眼</span>
             <input
