@@ -33,10 +33,14 @@ const statements = [
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "bookId" INTEGER NOT NULL,
     "orderIndex" INTEGER NOT NULL,
+    "sortKey" REAL NOT NULL DEFAULT 0,
     "word" TEXT NOT NULL,
     "phonetic" TEXT,
     "meaningText" TEXT NOT NULL,
     "explanationJson" TEXT NOT NULL,
+    "scope" TEXT NOT NULL DEFAULT 'PUBLIC',
+    "ownerUserId" INTEGER,
+    "insertAfterWordId" INTEGER,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Word_bookId_fkey" FOREIGN KEY ("bookId") REFERENCES "VocabBook" ("id") ON DELETE CASCADE ON UPDATE CASCADE
@@ -96,10 +100,58 @@ const statements = [
     CONSTRAINT "UserLastPosition_bookId_fkey" FOREIGN KEY ("bookId") REFERENCES "VocabBook" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "UserLastPosition_wordId_fkey" FOREIGN KEY ("wordId") REFERENCES "Word" ("id") ON DELETE SET NULL ON UPDATE CASCADE
   )`,
+  `CREATE TABLE "UserModelConfig" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "userId" INTEGER NOT NULL,
+    "provider" TEXT NOT NULL DEFAULT 'deepseek',
+    "baseUrl" TEXT NOT NULL DEFAULT 'https://api.deepseek.com',
+    "model" TEXT NOT NULL DEFAULT 'deepseek-v4-flash',
+    "encryptedApiKey" TEXT,
+    "temperature" REAL NOT NULL DEFAULT 0.4,
+    "maxTokens" INTEGER NOT NULL DEFAULT 1800,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "UserModelConfig_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE TABLE "AiChatSession" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "userId" INTEGER NOT NULL,
+    "bookId" INTEGER NOT NULL,
+    "wordId" INTEGER NOT NULL,
+    "title" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "AiChatSession_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "AiChatSession_bookId_fkey" FOREIGN KEY ("bookId") REFERENCES "VocabBook" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "AiChatSession_wordId_fkey" FOREIGN KEY ("wordId") REFERENCES "Word" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE TABLE "AiChatMessage" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "sessionId" INTEGER NOT NULL,
+    "role" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "AiChatMessage_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "AiChatSession" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE TABLE "UserWordExplanationOverride" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "userId" INTEGER NOT NULL,
+    "bookId" INTEGER NOT NULL,
+    "wordId" INTEGER NOT NULL,
+    "explanationJson" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "UserWordExplanationOverride_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "UserWordExplanationOverride_bookId_fkey" FOREIGN KEY ("bookId") REFERENCES "VocabBook" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "UserWordExplanationOverride_wordId_fkey" FOREIGN KEY ("wordId") REFERENCES "Word" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
   `CREATE UNIQUE INDEX "User_username_key" ON "User"("username")`,
   `CREATE UNIQUE INDEX "User_email_key" ON "User"("email")`,
   `CREATE UNIQUE INDEX "VocabBook_slug_key" ON "VocabBook"("slug")`,
   `CREATE INDEX "Word_bookId_word_idx" ON "Word"("bookId", "word")`,
+  `CREATE INDEX "Word_bookId_sortKey_idx" ON "Word"("bookId", "sortKey")`,
+  `CREATE INDEX "Word_bookId_scope_ownerUserId_idx" ON "Word"("bookId", "scope", "ownerUserId")`,
+  `CREATE INDEX "Word_insertAfterWordId_idx" ON "Word"("insertAfterWordId")`,
   `CREATE UNIQUE INDEX "Word_bookId_orderIndex_key" ON "Word"("bookId", "orderIndex")`,
   `CREATE UNIQUE INDEX "UserPreference_userId_key" ON "UserPreference"("userId")`,
   `CREATE INDEX "UserWordProgress_userId_idx" ON "UserWordProgress"("userId")`,
@@ -107,7 +159,13 @@ const statements = [
   `CREATE INDEX "UserWordFavorite_userId_idx" ON "UserWordFavorite"("userId")`,
   `CREATE UNIQUE INDEX "UserWordFavorite_userId_wordId_key" ON "UserWordFavorite"("userId", "wordId")`,
   `CREATE UNIQUE INDEX "UserBookmark_userId_bookId_key" ON "UserBookmark"("userId", "bookId")`,
-  `CREATE UNIQUE INDEX "UserLastPosition_userId_bookId_key" ON "UserLastPosition"("userId", "bookId")`
+  `CREATE UNIQUE INDEX "UserLastPosition_userId_bookId_key" ON "UserLastPosition"("userId", "bookId")`,
+  `CREATE UNIQUE INDEX "UserModelConfig_userId_key" ON "UserModelConfig"("userId")`,
+  `CREATE UNIQUE INDEX "AiChatSession_userId_bookId_wordId_key" ON "AiChatSession"("userId", "bookId", "wordId")`,
+  `CREATE INDEX "AiChatSession_userId_bookId_idx" ON "AiChatSession"("userId", "bookId")`,
+  `CREATE INDEX "AiChatMessage_sessionId_createdAt_idx" ON "AiChatMessage"("sessionId", "createdAt")`,
+  `CREATE UNIQUE INDEX "UserWordExplanationOverride_userId_wordId_key" ON "UserWordExplanationOverride"("userId", "wordId")`,
+  `CREATE INDEX "UserWordExplanationOverride_userId_bookId_idx" ON "UserWordExplanationOverride"("userId", "bookId")`
 ];
 
 async function main() {

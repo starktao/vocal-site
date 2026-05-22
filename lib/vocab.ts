@@ -38,8 +38,26 @@ export async function getBookBySlug(slug: string | undefined | null) {
 export async function getBookWords(slug?: string | null) {
   const book = await getBookBySlug(slug);
   const words = await prisma.word.findMany({
-    where: { bookId: book.id },
+    where: { bookId: book.id, scope: "PUBLIC" },
     orderBy: { orderIndex: "asc" }
+  });
+  return { book, words };
+}
+
+export async function getUserBookWords(userId: number, slug?: string | null) {
+  const book = await getBookBySlug(slug);
+  const words = await prisma.word.findMany({
+    where: {
+      bookId: book.id,
+      OR: [
+        { scope: "PUBLIC" },
+        { scope: "PRIVATE", ownerUserId: userId }
+      ]
+    },
+    orderBy: [
+      { sortKey: "asc" },
+      { id: "asc" }
+    ]
   });
   return { book, words };
 }

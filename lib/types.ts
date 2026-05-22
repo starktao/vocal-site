@@ -21,6 +21,7 @@ export type VocabCard = {
   phonetic: string;
   meaning: string;
   explanation: Explanation;
+  isPrivate?: boolean;
 };
 
 export type UserPreferenceDto = {
@@ -43,4 +44,20 @@ export type VocabBookDto = {
   title: string;
   slug: string;
   description?: string | null;
+};
+
+export type UserModelConfigDto = {
+  provider: string;
+  baseUrl: string;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  hasApiKey: boolean;
+};
+
+export type AiChatMessageDto = {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
 };

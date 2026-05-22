@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, LogOut, Search, Star, X } from "lucide-react";
-import { KeyboardEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Explanation, UserStateDto, VocabBookDto, VocabCard } from "@/lib/types";
+import { ChevronLeft, ChevronRight, Search, Star, UserCircle, X } from "lucide-react";
+import { FormEvent, KeyboardEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AiChatMessageDto, Explanation, UserStateDto, VocabBookDto, VocabCard } from "@/lib/types";
 
 type VocabResponse = {
   user: { id: number; username: string; role: "USER" | "ADMIN" };
@@ -78,7 +77,6 @@ function useDebouncedCallback(callback: () => void, delay = 450) {
 }
 
 export function VocabApp({ initialData }: { initialData: VocabResponse }) {
-  const router = useRouter();
   const gridRef = useRef<HTMLElement | null>(null);
   const detailRef = useRef<HTMLElement | null>(null);
   const cardRefs = useRef(new Map<number, HTMLElement>());
@@ -118,7 +116,7 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
     return index >= 0 ? Math.floor(index / 96) + 1 : savedPage;
   })();
 
-  const words = initialData.words;
+  const [wordList, setWordList] = useState(initialData.words);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [accent, setAccent] = useState(initialData.state.preferences.accent || "en-US");
@@ -132,6 +130,7 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
   const [activeId, setActiveId] = useState<number | null>(initialVisibleId);
   const [allAnchorId, setAllAnchorId] = useState<number | null>(initialActiveId);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [detailTab, setDetailTab] = useState<"explain" | "ai">("explain");
   const [toast, setToast] = useState("");
   const [voice, setVoice] = useState<SpeechSynthesisVoice | null>(null);
 
@@ -146,11 +145,13 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
     setActiveId(initialVisibleId);
     setAllAnchorId(initialActiveId);
     setDetailId(null);
+    setDetailTab("explain");
+    setWordList(initialData.words);
   }, [initialData.book.slug]);
 
   const filteredWords = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return words.filter((entry) => {
+    return wordList.filter((entry) => {
       const count = Math.min(5, Math.max(0, progress[entry.id] || 0));
       if (progressFilter === "unfamiliar" && count < 3) return false;
       if (progressFilter === "favorite" && !favorites.has(entry.id)) return false;
@@ -161,14 +162,14 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
         entry.phonetic.toLowerCase().includes(needle)
       );
     });
-  }, [favorites, progress, progressFilter, query, words]);
+  }, [favorites, progress, progressFilter, query, wordList]);
 
   const totalPages = Math.max(1, Math.ceil(filteredWords.length / pageSize));
   const safePage = Math.max(1, Math.min(currentPage, totalPages));
   const visibleWords = filteredWords.slice((safePage - 1) * pageSize, safePage * pageSize);
   const activeIndex = activeId == null ? -1 : filteredWords.findIndex((entry) => entry.id === activeId);
   const activePage = activeIndex >= 0 ? Math.floor(activeIndex / pageSize) + 1 : null;
-  const detailEntry = words.find((word) => word.id === detailId) || null;
+  const detailEntry = wordList.find((word) => word.id === detailId) || null;
   const showToast = useCallback((text: string) => {
     setToast(text);
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
@@ -254,15 +255,15 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
 
   const findClosestEntry = useCallback((list: VocabCard[], anchorId: number | null = allAnchorId) => {
     if (!list.length) return null;
-    const anchorIndex = anchorId == null ? -1 : words.findIndex((entry) => entry.id === anchorId);
+    const anchorIndex = anchorId == null ? -1 : wordList.findIndex((entry) => entry.id === anchorId);
     if (anchorIndex < 0) return list[0];
-    const anchorOrder = words[anchorIndex].orderIndex;
+    const anchorOrder = wordList[anchorIndex].orderIndex;
     return list.reduce((best, entry) => {
       const bestDistance = Math.abs(best.orderIndex - anchorOrder);
       const entryDistance = Math.abs(entry.orderIndex - anchorOrder);
       return entryDistance < bestDistance ? entry : best;
     }, list[0]);
-  }, [allAnchorId, words]);
+  }, [allAnchorId, wordList]);
 
   const selectEntry = useCallback((entry: VocabCard, options: { focus?: boolean; speakWord?: boolean; keepDetail?: boolean } = {}) => {
     const changed = activeId !== entry.id;
@@ -281,6 +282,7 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
   const openDetail = useCallback((entry: VocabCard) => {
     selectEntry(entry, { keepDetail: true });
     setDetailId(entry.id);
+    setDetailTab("explain");
     setProgress((current) => ({ ...current, [entry.id]: Math.min(999, (current[entry.id] || 0) + 1) }));
     void fetch("/api/progress", {
       method: "POST",
@@ -419,10 +421,20 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
     }
   }
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
-    router.refresh();
+  function updateWordExplanation(wordId: number, explanation: Explanation, meaning: string) {
+    setWordList((current) => current.map((word) => word.id === wordId ? { ...word, explanation, meaning } : word));
+  }
+
+  function insertPrivateWord(anchorId: number, word: VocabCard) {
+    setWordList((current) => {
+      if (current.some((entry) => entry.id === word.id)) return current;
+      const index = current.findIndex((entry) => entry.id === anchorId);
+      if (index < 0) return [...current, word];
+      return [...current.slice(0, index + 1), word, ...current.slice(index + 1)];
+    });
+    setProgress((current) => ({ ...current, [word.id]: 0 }));
+    setFavorites((current) => new Set(current));
+    showToast(`已加入 ${word.word}`);
   }
 
   function handleProgressFilterChange(value: string) {
@@ -430,20 +442,20 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
     setProgressFilter(nextFilter);
     setDetailId(null);
     lastCardClick.current = { id: null, time: 0 };
-    const anchorEntry = words.find((entry) => entry.id === allAnchorId) || words[0] || null;
+    const anchorEntry = wordList.find((entry) => entry.id === allAnchorId) || wordList[0] || null;
     if (nextFilter === "all") {
       if (!anchorEntry) {
         setActiveId(null);
         setCurrentPage(1);
         return;
       }
-      const anchorPage = Math.floor(words.findIndex((entry) => entry.id === anchorEntry.id) / pageSize) + 1;
+      const anchorPage = Math.floor(wordList.findIndex((entry) => entry.id === anchorEntry.id) / pageSize) + 1;
       setActiveId(anchorEntry.id);
       setCurrentPage(anchorPage);
       requestAnimationFrame(() => focusCard(anchorEntry.id));
       return;
     }
-    const nextList = words.filter((entry) => {
+    const nextList = wordList.filter((entry) => {
       const count = Math.min(5, Math.max(0, progress[entry.id] || 0));
       if (nextFilter === "unfamiliar") return count >= 3;
       if (nextFilter === "favorite") return favorites.has(entry.id);
@@ -559,8 +571,8 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
       if (event.key.toLowerCase() === "k") {
         const target = event.target as HTMLElement | null;
         const tag = target?.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
-        const entry = words.find((word) => word.id === activeId);
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "BUTTON" || target?.isContentEditable) return;
+        const entry = wordList.find((word) => word.id === activeId);
         if (!entry) return;
         event.preventDefault();
         toggleFavorite(entry);
@@ -568,7 +580,7 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
     }
     document.addEventListener("keydown", handleKeydown);
     return () => document.removeEventListener("keydown", handleKeydown);
-  }, [activeId, moveSelection, toggleFavorite, words]);
+  }, [activeId, moveSelection, toggleFavorite, wordList]);
 
   const start = filteredWords.length ? (safePage - 1) * pageSize + 1 : 0;
   const end = Math.min(safePage * pageSize, filteredWords.length);
@@ -650,7 +662,7 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
           </div>
           <div className="account-actions">
             {initialData.user.role === "ADMIN" && <Link className="tiny-link" href="/admin">Admin</Link>}
-            <button className="tiny-link" type="button" onClick={logout}><LogOut size={14} /> 退出</button>
+            <Link className="tiny-link account-link" href="/settings"><UserCircle size={15} /> {initialData.user.username}</Link>
           </div>
         </div>
       </header>
@@ -674,7 +686,7 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
               onKeyDown={(event) => handleCardKey(event, entry)}
             >
               <div className="word-row">
-                <div className="word">{entry.word}</div>
+                <div className="word">{entry.word}{entry.isPrivate && <span className="private-mark">私</span>}</div>
                 <button
                   className={`favorite-btn${favorite ? " is-on" : ""}`}
                   type="button"
@@ -726,7 +738,24 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
           </button>
         </div>
         <div className="detail-body">
-          {detailEntry && <DetailContent entry={detailEntry} />}
+          {detailEntry && (
+            <>
+              <div className="detail-tabs">
+                <button className={detailTab === "explain" ? "is-active" : ""} type="button" onClick={() => setDetailTab("explain")}>解释</button>
+                <button className={detailTab === "ai" ? "is-active" : ""} type="button" onClick={() => setDetailTab("ai")}>AI</button>
+              </div>
+              {detailTab === "explain" ? (
+                <DetailContent entry={detailEntry} />
+              ) : (
+                <AiPanel
+                  entry={detailEntry}
+                  bookSlug={initialData.book.slug}
+                  onUpdateExplanation={updateWordExplanation}
+                  onAddWord={insertPrivateWord}
+                />
+              )}
+            </>
+          )}
         </div>
       </aside>
       <div className={`toast${toast ? " is-open" : ""}`}>{toast}</div>
@@ -811,6 +840,290 @@ function DetailContent({ entry }: { entry: VocabCard }) {
         </section>
       )}
     </>
+  );
+}
+
+type UpdatePreview = {
+  status: "ok";
+  summary: string;
+  explanation: Explanation;
+  meaningText: string;
+};
+
+type AddWordCandidate = {
+  word: string;
+  phonetic?: string;
+  meaningText: string;
+  reason?: string;
+  explanation: Explanation;
+};
+
+type AddWordPreview = {
+  status: "ok";
+  summary: string;
+  candidates: AddWordCandidate[];
+};
+
+function AiPanel({
+  entry,
+  bookSlug,
+  onUpdateExplanation,
+  onAddWord
+}: {
+  entry: VocabCard;
+  bookSlug: string;
+  onUpdateExplanation: (wordId: number, explanation: Explanation, meaning: string) => void;
+  onAddWord: (anchorId: number, word: VocabCard) => void;
+}) {
+  const [messages, setMessages] = useState<AiChatMessageDto[]>([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [updatePreview, setUpdatePreview] = useState<UpdatePreview | null>(null);
+  const [addPreview, setAddPreview] = useState<AddWordPreview | null>(null);
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setMessages([]);
+    setInput("");
+    setNotice("");
+    setUpdatePreview(null);
+    setAddPreview(null);
+    fetch(`/api/ai/session?book=${encodeURIComponent(bookSlug)}&wordId=${entry.id}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (!alive || !data?.messages) return;
+        setMessages(data.messages);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [bookSlug, entry.id]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 80);
+    return () => window.clearTimeout(timer);
+  }, [entry.id]);
+
+  useEffect(() => {
+    messageEndRef.current?.scrollIntoView({ block: "end" });
+  }, [messages, busy]);
+
+  async function sendMessage(event: FormEvent) {
+    event.preventDefault();
+    const text = input.trim();
+    if (!text || busy) return;
+    const optimistic: AiChatMessageDto = {
+      id: Date.now(),
+      role: "user",
+      content: text,
+      createdAt: new Date().toISOString()
+    };
+    const assistantId = Date.now() + 1;
+    const streamingMessage: AiChatMessageDto = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      createdAt: new Date().toISOString()
+    };
+    setMessages((current) => [...current, optimistic, streamingMessage]);
+    setInput("");
+    setNotice("");
+    setUpdatePreview(null);
+    setAddPreview(null);
+    setBusy(true);
+    const response = await fetch("/api/ai/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bookSlug, wordId: entry.id, message: text })
+    });
+    if (!response.ok || !response.body) {
+      const data = await response.json().catch(() => null);
+      setMessages((current) => current.filter((message) => message.id !== assistantId));
+      setBusy(false);
+      setNotice(data?.error || "AI 回复失败");
+      return;
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let answer = "";
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        if (!chunk) continue;
+        answer += chunk;
+        setMessages((current) => current.map((message) => (
+          message.id === assistantId ? { ...message, content: answer } : message
+        )));
+      }
+      const tail = decoder.decode();
+      if (tail) {
+        answer += tail;
+        setMessages((current) => current.map((message) => (
+          message.id === assistantId ? { ...message, content: answer } : message
+        )));
+      }
+      if (!answer.trim()) {
+        setMessages((current) => current.filter((message) => message.id !== assistantId));
+        setNotice("AI 没有返回内容");
+      }
+    } catch {
+      setNotice("AI 回复中断，请重试");
+    } finally {
+      setBusy(false);
+      reader.releaseLock();
+    }
+  }
+
+  async function previewUpdate() {
+    setBusy(true);
+    setNotice("");
+    setUpdatePreview(null);
+    setAddPreview(null);
+    const response = await fetch("/api/ai/update-explanation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bookSlug, wordId: entry.id })
+    });
+    const data = await response.json().catch(() => null);
+    setBusy(false);
+    if (!response.ok) {
+      setNotice(data?.error || "生成更新预览失败");
+      return;
+    }
+    if (data.status !== "ok") {
+      setNotice(data.reason || "没有发现适合更新的内容。");
+      return;
+    }
+    setUpdatePreview(data);
+  }
+
+  async function confirmUpdate() {
+    if (!updatePreview) return;
+    setBusy(true);
+    setNotice("");
+    const response = await fetch("/api/ai/update-explanation", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bookSlug, wordId: entry.id, explanation: updatePreview.explanation })
+    });
+    const data = await response.json().catch(() => null);
+    setBusy(false);
+    if (!response.ok) {
+      setNotice(data?.error || "保存更新失败");
+      return;
+    }
+    onUpdateExplanation(entry.id, data.explanation, data.meaningText);
+    setUpdatePreview(null);
+    setNotice("已更新本词解释");
+  }
+
+  async function previewAddWord() {
+    setBusy(true);
+    setNotice("");
+    setUpdatePreview(null);
+    setAddPreview(null);
+    const response = await fetch("/api/ai/add-word", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bookSlug, wordId: entry.id })
+    });
+    const data = await response.json().catch(() => null);
+    setBusy(false);
+    if (!response.ok) {
+      setNotice(data?.error || "生成新词预览失败");
+      return;
+    }
+    if (data.status !== "ok") {
+      setNotice(data.reason || "没有发现适合增添的新词。");
+      return;
+    }
+    setAddPreview(data);
+  }
+
+  async function confirmAddWord(candidate: AddWordCandidate) {
+    setBusy(true);
+    setNotice("");
+    const response = await fetch("/api/ai/add-word", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bookSlug, wordId: entry.id, candidate })
+    });
+    const data = await response.json().catch(() => null);
+    setBusy(false);
+    if (!response.ok) {
+      setNotice(data?.error || "加入新词失败");
+      return;
+    }
+    onAddWord(entry.id, data.word);
+    setAddPreview(null);
+    setNotice(`已加入 ${data.word.word}`);
+  }
+
+  return (
+    <section className="ai-panel">
+      <div className="ai-thread">
+        {messages.length === 0 && <div className="ai-empty">可以直接问这个词的用法、辨析、词源或记忆方法。</div>}
+        {messages.map((message) => (
+          <div key={message.id} className={`ai-message ${message.role}`}>
+            <div>{message.content}</div>
+          </div>
+        ))}
+        {busy && <div className="ai-message assistant"><div>处理中...</div></div>}
+        <div ref={messageEndRef} />
+      </div>
+      <form className="ai-input-row" onSubmit={sendMessage}>
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          placeholder={`问问 ${entry.word}`}
+          rows={2}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
+        />
+        <button className="primary-btn ai-send" type="submit" disabled={busy || !input.trim()}>发送</button>
+      </form>
+      <div className="ai-actions">
+        <button className="secondary-btn" type="button" onClick={previewUpdate} disabled={busy}>更新解释</button>
+        <button className="secondary-btn" type="button" onClick={previewAddWord} disabled={busy}>增添新词</button>
+      </div>
+      {notice && <div className="ai-notice">{notice}</div>}
+      {updatePreview && (
+        <div className="ai-preview">
+          <h3>更新预览</h3>
+          <p>{updatePreview.summary}</p>
+          <DetailContent entry={{ ...entry, explanation: updatePreview.explanation, meaning: updatePreview.meaningText }} />
+          <div className="form-actions">
+            <button className="primary-btn" type="button" onClick={confirmUpdate} disabled={busy}>确认更新</button>
+            <button className="secondary-btn" type="button" onClick={() => setUpdatePreview(null)} disabled={busy}>取消</button>
+          </div>
+        </div>
+      )}
+      {addPreview && (
+        <div className="ai-preview">
+          <h3>新词预览</h3>
+          <p>{addPreview.summary}</p>
+          {addPreview.candidates.map((candidate) => (
+            <div className="candidate-card" key={candidate.word}>
+              <strong>{candidate.word}</strong>
+              <span>{candidate.meaningText}</span>
+              {candidate.reason && <p>{candidate.reason}</p>}
+              <button className="primary-btn" type="button" onClick={() => confirmAddWord(candidate)} disabled={busy}>加入到当前词后</button>
+            </div>
+          ))}
+          <button className="secondary-btn" type="button" onClick={() => setAddPreview(null)} disabled={busy}>取消</button>
+        </div>
+      )}
+    </section>
   );
 }
 

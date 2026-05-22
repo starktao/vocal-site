@@ -74,6 +74,7 @@ async function main() {
       data: {
         bookId: book.id,
         orderIndex: index + 1,
+        sortKey: index + 1,
         word: wordItem.word,
         phonetic: wordItem.phonetic || explanation.phonetic || "",
         meaningText: meaningText(normalized, wordItem.meaning || ""),

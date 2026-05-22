@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth";
-import { getAllBooks, getBookWords, resolveBookSlug } from "@/lib/vocab";
+import { parseExplanationJson } from "@/lib/explanation";
+import { getAllBooks, getUserBookWords, resolveBookSlug } from "@/lib/vocab";
 import { prisma } from "@/lib/prisma";
 import { VocabApp } from "@/components/VocabApp";
 
@@ -13,10 +14,10 @@ export default async function LearnPage({ searchParams }: { searchParams?: Promi
   });
   const bookSlug = await resolveBookSlug(params?.book, preferences.selectedBookSlug);
   const [{ book, words }, books] = await Promise.all([
-    getBookWords(bookSlug),
+    getUserBookWords(user.id, bookSlug),
     getAllBooks()
   ]);
-  const [progressRows, favoriteRows, lastPosition] = await Promise.all([
+  const [progressRows, favoriteRows, lastPosition, overrides] = await Promise.all([
     prisma.userWordProgress.findMany({
       where: { userId: user.id, word: { bookId: book.id } },
       select: { wordId: true, viewCount: true }
@@ -28,8 +29,13 @@ export default async function LearnPage({ searchParams }: { searchParams?: Promi
     prisma.userLastPosition.findUnique({
       where: { userId_bookId: { userId: user.id, bookId: book.id } },
       select: { page: true, wordId: true }
+    }),
+    prisma.userWordExplanationOverride.findMany({
+      where: { userId: user.id, bookId: book.id },
+      select: { wordId: true, explanationJson: true }
     })
   ]);
+  const overrideByWordId = new Map(overrides.map((item) => [item.wordId, item.explanationJson]));
 
   await prisma.userPreference.upsert({
     where: { userId: user.id },
@@ -50,7 +56,8 @@ export default async function LearnPage({ searchParams }: { searchParams?: Promi
           word: word.word,
           phonetic: word.phonetic || "",
           meaning: word.meaningText,
-          explanation: JSON.parse(word.explanationJson)
+          explanation: parseExplanationJson(overrideByWordId.get(word.id) || word.explanationJson, word.word, word.meaningText),
+          isPrivate: word.scope === "PRIVATE"
         })),
         state: {
           preferences: {

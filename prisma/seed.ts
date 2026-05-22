@@ -91,6 +91,7 @@ async function main() {
       data: {
         bookId: book.id,
         orderIndex: index + 1,
+        sortKey: index + 1,
         word: item.word,
         phonetic: item.phonetic || cardByWord.get(item.word.trim().toLowerCase())?.phonetic || "",
         meaningText: meaningText(item),

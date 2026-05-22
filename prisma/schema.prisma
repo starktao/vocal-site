@@ -12,51 +12,70 @@ enum Role {
   ADMIN
 }
 
+enum WordScope {
+  PUBLIC
+  PRIVATE
+}
+
 model User {
-  id             Int                @id @default(autoincrement())
-  username       String             @unique
-  email          String?            @unique
-  passwordHash   String
-  role           Role               @default(USER)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  preferences    UserPreference?
-  progress       UserWordProgress[]
-  favorites      UserWordFavorite[]
-  bookmarks      UserBookmark[]
-  lastPositions  UserLastPosition[]
+  id                    Int                            @id @default(autoincrement())
+  username              String                         @unique
+  email                 String?                        @unique
+  passwordHash          String
+  role                  Role                           @default(USER)
+  createdAt             DateTime                       @default(now())
+  updatedAt             DateTime                       @updatedAt
+  preferences           UserPreference?
+  modelConfig           UserModelConfig?
+  progress              UserWordProgress[]
+  favorites             UserWordFavorite[]
+  bookmarks             UserBookmark[]
+  lastPositions         UserLastPosition[]
+  aiChatSessions        AiChatSession[]
+  explanationOverrides  UserWordExplanationOverride[]
 }
 
 model VocabBook {
-  id            Int                @id @default(autoincrement())
-  title         String
-  slug          String             @unique
-  description   String?
-  words         Word[]
-  bookmarks     UserBookmark[]
-  lastPositions UserLastPosition[]
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  id                   Int                            @id @default(autoincrement())
+  title                String
+  slug                 String                         @unique
+  description          String?
+  words                Word[]
+  bookmarks            UserBookmark[]
+  lastPositions        UserLastPosition[]
+  aiChatSessions       AiChatSession[]
+  explanationOverrides UserWordExplanationOverride[]
+  createdAt            DateTime                       @default(now())
+  updatedAt            DateTime                       @updatedAt
 }
 
 model Word {
-  id              Int                @id @default(autoincrement())
-  bookId          Int
-  book            VocabBook          @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  orderIndex      Int
-  word            String
-  phonetic        String?
-  meaningText     String
-  explanationJson String
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  progress        UserWordProgress[]
-  favorites       UserWordFavorite[]
-  bookmarks       UserBookmark[]
-  lastPositions   UserLastPosition[]
+  id                   Int                            @id @default(autoincrement())
+  bookId               Int
+  book                 VocabBook                      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  orderIndex           Int
+  sortKey              Float                          @default(0)
+  word                 String
+  phonetic             String?
+  meaningText          String
+  explanationJson      String
+  scope                WordScope                      @default(PUBLIC)
+  ownerUserId          Int?
+  insertAfterWordId    Int?
+  createdAt            DateTime                       @default(now())
+  updatedAt            DateTime                       @updatedAt
+  progress             UserWordProgress[]
+  favorites            UserWordFavorite[]
+  bookmarks            UserBookmark[]
+  lastPositions        UserLastPosition[]
+  aiChatSessions       AiChatSession[]
+  explanationOverrides UserWordExplanationOverride[]
 
   @@unique([bookId, orderIndex])
   @@index([bookId, word])
+  @@index([bookId, sortKey])
+  @@index([bookId, scope, ownerUserId])
+  @@index([insertAfterWordId])
 }
 
 model UserPreference {
@@ -127,4 +146,62 @@ model UserLastPosition {
   updatedAt DateTime  @updatedAt
 
   @@unique([userId, bookId])
+}
+
+model UserModelConfig {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider        String   @default("deepseek")
+  baseUrl         String   @default("https://api.deepseek.com")
+  model           String   @default("deepseek-v4-flash")
+  encryptedApiKey String?
+  temperature     Float    @default(0.4)
+  maxTokens       Int      @default(1800)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model AiChatSession {
+  id        Int             @id @default(autoincrement())
+  userId    Int
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId    Int
+  book      VocabBook       @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  wordId    Int
+  word      Word            @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  title     String?
+  messages  AiChatMessage[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([userId, bookId, wordId])
+  @@index([userId, bookId])
+}
+
+model AiChatMessage {
+  id        Int           @id @default(autoincrement())
+  sessionId Int
+  session   AiChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String
+  content   String
+  createdAt DateTime      @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
+model UserWordExplanationOverride {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId          Int
+  book            VocabBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  wordId          Int
+  word            Word      @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  explanationJson String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, wordId])
+  @@index([userId, bookId])
 }

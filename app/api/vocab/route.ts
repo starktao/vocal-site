@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth";
-import { getAllBooks, getBookWords, resolveBookSlug } from "@/lib/vocab";
+import { parseExplanationJson } from "@/lib/explanation";
+import { getAllBooks, getUserBookWords, resolveBookSlug } from "@/lib/vocab";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -13,8 +14,8 @@ export async function GET(request: NextRequest) {
     create: { userId: user.id }
   });
   const bookSlug = await resolveBookSlug(request.nextUrl.searchParams.get("book"), preferences.selectedBookSlug);
-  const { book, words } = await getBookWords(bookSlug);
-  const [books, progressRows, favoriteRows, lastPosition] = await Promise.all([
+  const { book, words } = await getUserBookWords(user.id, bookSlug);
+  const [books, progressRows, favoriteRows, lastPosition, overrides] = await Promise.all([
     getAllBooks(),
     prisma.userWordProgress.findMany({
       where: { userId: user.id, word: { bookId: book.id } },
@@ -27,8 +28,13 @@ export async function GET(request: NextRequest) {
     prisma.userLastPosition.findUnique({
       where: { userId_bookId: { userId: user.id, bookId: book.id } },
       select: { page: true, wordId: true }
+    }),
+    prisma.userWordExplanationOverride.findMany({
+      where: { userId: user.id, bookId: book.id },
+      select: { wordId: true, explanationJson: true }
     })
   ]);
+  const overrideByWordId = new Map(overrides.map((item) => [item.wordId, item.explanationJson]));
 
   await prisma.userPreference.upsert({
     where: { userId: user.id },
@@ -46,7 +52,8 @@ export async function GET(request: NextRequest) {
       word: word.word,
       phonetic: word.phonetic || "",
       meaning: word.meaningText,
-      explanation: JSON.parse(word.explanationJson)
+      explanation: parseExplanationJson(overrideByWordId.get(word.id) || word.explanationJson, word.word, word.meaningText),
+      isPrivate: word.scope === "PRIVATE"
     })),
     state: {
       preferences: {
