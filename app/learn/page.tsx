@@ -39,6 +39,7 @@ export default async function LearnPage({ searchParams }: { searchParams?: Promi
 
   return (
     <VocabApp
+      key={book.slug}
       initialData={{
         user,
         book,

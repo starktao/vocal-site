@@ -18,6 +18,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Promi
 
   return (
     <AdminWordManager
+      key={book.slug}
       book={book}
       books={books}
       words={words.map((word) => ({

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 import type { VocabBookDto, VocabCard } from "@/lib/types";
 
@@ -16,7 +15,6 @@ export function AdminWordManager({
   words: VocabCard[];
   stats: { users: number; progressRows: number; wordCount: number };
 }) {
-  const router = useRouter();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(words[0]?.id || 0);
   const selected = words.find((word) => word.id === selectedId) || words[0];
@@ -79,7 +77,15 @@ export function AdminWordManager({
         <div className="account-actions">
           <label className="book-select" aria-label="Vocabulary book">
             <span>词书</span>
-            <select value={book.slug} onChange={(event) => router.push(`/admin?book=${encodeURIComponent(event.target.value)}`)}>
+            <select
+              value={book.slug}
+              onChange={(event) => {
+                window.location.href = `/admin?book=${encodeURIComponent(event.currentTarget.value)}`;
+              }}
+              onInput={(event) => {
+                window.location.href = `/admin?book=${encodeURIComponent(event.currentTarget.value)}`;
+              }}
+            >
               {books.map((item) => <option key={item.slug} value={item.slug}>{item.title}</option>)}
             </select>
           </label>

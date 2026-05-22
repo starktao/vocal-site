@@ -118,7 +118,7 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
     return index >= 0 ? Math.floor(index / 96) + 1 : savedPage;
   })();
 
-  const [words] = useState(initialData.words);
+  const words = initialData.words;
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [accent, setAccent] = useState(initialData.state.preferences.accent || "en-US");
@@ -134,6 +134,19 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
   const [detailId, setDetailId] = useState<number | null>(null);
   const [toast, setToast] = useState("");
   const [voice, setVoice] = useState<SpeechSynthesisVoice | null>(null);
+
+  useEffect(() => {
+    cardRefs.current.clear();
+    lastCardClick.current = { id: null, time: 0 };
+    setQuery("");
+    setSearchOpen(false);
+    setProgress(initialProgress);
+    setFavorites(initialFavorites);
+    setCurrentPage(initialPage);
+    setActiveId(initialVisibleId);
+    setAllAnchorId(initialActiveId);
+    setDetailId(null);
+  }, [initialData.book.slug]);
 
   const filteredWords = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -312,7 +325,7 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
   function handleBookChange(value: string) {
     if (!value || value === initialData.book.slug) return;
     setDetailId(null);
-    router.push(`/learn?book=${encodeURIComponent(value)}`);
+    window.location.href = `/learn?book=${encodeURIComponent(value)}`;
   }
 
   const setPage = useCallback((page: number, force = false) => {
@@ -588,7 +601,11 @@ export function VocabApp({ initialData }: { initialData: VocabResponse }) {
           <Segmented value={soundMode} options={[["auto", "Auto"], ["manual", "Manual"]]} onChange={setSoundMode} className="sound-mode" />
           <label className="book-select" aria-label="Vocabulary book">
             <span>词书</span>
-            <select value={initialData.book.slug} onChange={(event) => handleBookChange(event.target.value)}>
+            <select
+              value={initialData.book.slug}
+              onChange={(event) => handleBookChange(event.currentTarget.value)}
+              onInput={(event) => handleBookChange(event.currentTarget.value)}
+            >
               {initialData.books.map((book) => (
                 <option key={book.slug} value={book.slug}>{book.title}</option>
               ))}
