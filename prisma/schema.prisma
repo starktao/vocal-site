@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id             Int                @id @default(autoincrement())
+  username       String             @unique
+  email          String?            @unique
+  passwordHash   String
+  role           Role               @default(USER)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  preferences    UserPreference?
+  progress       UserWordProgress[]
+  favorites      UserWordFavorite[]
+  bookmarks      UserBookmark[]
+  lastPositions  UserLastPosition[]
+}
+
+model VocabBook {
+  id            Int                @id @default(autoincrement())
+  title         String
+  slug          String             @unique
+  description   String?
+  words         Word[]
+  bookmarks     UserBookmark[]
+  lastPositions UserLastPosition[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+model Word {
+  id              Int                @id @default(autoincrement())
+  bookId          Int
+  book            VocabBook          @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  orderIndex      Int
+  word            String
+  phonetic        String?
+  meaningText     String
+  explanationJson String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  progress        UserWordProgress[]
+  favorites       UserWordFavorite[]
+  bookmarks       UserBookmark[]
+  lastPositions   UserLastPosition[]
+
+  @@unique([bookId, orderIndex])
+  @@index([bookId, word])
+}
+
+model UserPreference {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accent         String   @default("en-US")
+  soundMode      String   @default("auto")
+  progressFilter String   @default("all")
+  eyeCareLevel   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model UserWordProgress {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wordId       Int
+  word         Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  viewCount    Int      @default(0)
+  lastViewedAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, wordId])
+  @@index([userId])
+}
+
+model UserWordFavorite {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wordId    Int
+  word      Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, wordId])
+  @@index([userId])
+}
+
+model UserBookmark {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId    Int
+  book      VocabBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  page      Int       @default(1)
+  wordId    Int?
+  word      Word?     @relation(fields: [wordId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, bookId])
+}
+
+model UserLastPosition {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId    Int
+  book      VocabBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  page      Int       @default(1)
+  wordId    Int?
+  word      Word?     @relation(fields: [wordId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, bookId])
+}
